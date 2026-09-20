@@ -1,0 +1,38 @@
+{
+  "name": "merah-putih-webgis",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "packages/contracts"
+  ],
+  "engines": {
+    "node": ">=24 <26"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "npm run dev --workspace @kdmp/web",
+    "dev:api": "node scripts/dev-api.mjs",
+    "build": "npm run build --workspace @kdmp/web",
+    "start": "npm run start --workspace @kdmp/web",
+    "lint": "npm run lint --workspace @kdmp/web",
+    "typecheck": "npm run typecheck --workspace @kdmp/web && tsc --project tsconfig.tools.json --noEmit",
+    "test": "npm run test:api && npm run test:e2e",
+    "test:api": "uv run --project apps/api pytest apps/api/tests -m \"not integration\"",
+    "check:api": "uv run --project apps/api ruff check apps/api && uv run --project apps/api ruff format --check apps/api && uv run --project apps/api mypy apps/api/src",
+    "contracts:generate": "uv run --project apps/api python apps/api/scripts/export_openapi.py && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts",
+    "contracts:check": "node scripts/check-contracts.mjs",
+    "test:e2e": "playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:integration": "docker compose -p kdmp-foundation-test -f compose.test.yaml run --build --rm tests",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run check:api && npm run test:api && npm run contracts:check",
+    "stack:up": "docker compose up --build -d --wait",
+    "stack:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "openapi-typescript": "7.13.0",
+    "prettier": "3.9.8"
+  }
+}
