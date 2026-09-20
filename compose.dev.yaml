@@ -1,0 +1,8 @@
+# Optional host development access, loopback only. No production ports for DB/API.
+services:
+  db:
+    ports: ["127.0.0.1:${DB_PORT:-55432}:5432"]
+  api:
+    environment:
+      KDMP_ENVIRONMENT: development
+    ports: ["127.0.0.1:${API_PORT:-8000}:8000"]
