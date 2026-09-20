@@ -1,0 +1,50 @@
+name: Foundation checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      CI: true
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.11.7"
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: npm ci
+      - run: uv sync --project apps/api --locked
+      - run: npm run check
+      - run: npm run setup
+      - run: docker compose config --quiet
+      - run: npm run test:integration
+      - run: docker compose -p kdmp-foundation-test -f compose.test.yaml down
+      - run: docker compose up --build -d --wait --wait-timeout 180
+      - run: docker compose run --rm migrate alembic -c alembic.ini check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose logs --tail 100 api web migrate
+      - name: Stop isolated services
+        if: always()
+        run: |
+          docker compose -p kdmp-foundation-test -f compose.test.yaml down
+          docker compose down
