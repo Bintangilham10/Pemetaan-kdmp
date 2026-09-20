@@ -1,0 +1,115 @@
+name: ${COMPOSE_PROJECT_NAME:-kdmp-foundation}
+
+x-api-build: &api-build
+  context: .
+  dockerfile: apps/api/Dockerfile
+  target: runtime
+
+x-api-environment: &api-environment
+  KDMP_ENVIRONMENT: production
+  KDMP_ALLOWED_HOSTS: '["api","localhost","127.0.0.1"]'
+
+services:
+  db:
+    image: postgis/postgis:18-3.6@sha256:60f6ad1d21ea86a67d47780b9a0d1e1d200500f62b19293fa834d0dea80b8677
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kdmp}
+      POSTGRES_USER: ${POSTGRES_USER:-kdmp_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run npm run setup first}
+      MIGRATOR_PASSWORD: ${MIGRATOR_PASSWORD:?Run npm run setup first}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?Run npm run setup first}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - postgres18_data:/var/lib/postgresql
+      - ./infra/db/20-app-roles.sh:/docker-entrypoint-initdb.d/20-app-roles.sh:ro
+    networks: [data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+
+  migrate:
+    build: *api-build
+    environment:
+      <<: *api-environment
+      KDMP_DATABASE_URL: postgresql+psycopg://kdmp_migrator:${MIGRATOR_PASSWORD}@db:5432/${POSTGRES_DB:-kdmp}
+    command: [alembic, -c, alembic.ini, upgrade, head]
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [data]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+  api:
+    build: *api-build
+    environment:
+      <<: *api-environment
+      KDMP_DATABASE_URL: postgresql+psycopg://kdmp_api:${API_DB_PASSWORD}@db:5432/${POSTGRES_DB:-kdmp}
+    depends_on:
+      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    networks: [app, data]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+    healthcheck:
+      test:
+        [
+          CMD,
+          python,
+          -c,
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=7)",
+        ]
+      interval: 10s
+      timeout: 8s
+      retries: 6
+      start_period: 15s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      API_INTERNAL_URL: http://api:8000
+      MAP_STYLE_URL: ${MAP_STYLE_URL:-https://demotiles.maplibre.org/style.json}
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    ports: ["127.0.0.1:${WEB_PORT:-3000}:3000"]
+    networks: [app]
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp, /app/apps/web/.next/cache]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3000/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+networks:
+  app:
+  data:
+    internal: true
+
+volumes:
+  postgres18_data:
