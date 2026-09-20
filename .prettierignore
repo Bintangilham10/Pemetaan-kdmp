@@ -1,0 +1,15 @@
+node_modules
+**/.next
+**/.venv
+**/__pycache__
+**/.mypy_cache
+**/.ruff_cache
+**/.pytest_cache
+packages/contracts/openapi.json
+packages/contracts/src/schema.d.ts
+package-lock.json
+artifacts
+.playwright-cli
+test-results
+playwright-report
+apps/web/public/vendor
