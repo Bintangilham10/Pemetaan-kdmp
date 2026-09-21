@@ -1,0 +1,1 @@
+"""Koperasi Merah Putih API."""
