@@ -1,0 +1,99 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --background: #f7f8fa;
+  --foreground: #17212e;
+  --card: #ffffff;
+  --card-foreground: #17212e;
+  --primary: #b42335;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f3f6;
+  --secondary-foreground: #334155;
+  --muted: #f1f3f6;
+  --muted-foreground: #657184;
+  --accent: #fff1f2;
+  --accent-foreground: #a51e30;
+  --destructive: #b42335;
+  --border: #e3e7ec;
+  --input: #e3e7ec;
+  --ring: #b42335;
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: "Inter", "Segoe UI", Arial, sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  button:not(:disabled),
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+  ::selection {
+    background: #ffe0e4;
+  }
+}
+
+.maplibregl-map {
+  font: inherit;
+}
+.maplibregl-ctrl-group {
+  border: 1px solid var(--border);
+  box-shadow: 0 3px 12px #1b2b4510 !important;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.maplibregl-ctrl-group button {
+  width: 38px;
+  height: 38px;
+}
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+}
+.maplibregl-canvas:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+}
+.maplibregl-popup-content {
+  padding: 14px 18px;
+  border-radius: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
