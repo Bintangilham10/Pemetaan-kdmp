@@ -1,0 +1,11 @@
+{
+  "name": "@kdmp/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "types": "./src/schema.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/schema.d.ts"
+    }
+  }
+}
