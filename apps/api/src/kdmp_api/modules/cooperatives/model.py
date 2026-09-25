@@ -23,6 +23,13 @@ class ImportBatch(Base):
     __tablename__ = "import_batches"
     __table_args__ = (
         UniqueConstraint("dataset_key", "version", name="uq_import_batches_version"),
+        CheckConstraint(
+            "(village_reference_version IS NULL AND village_reference_source_url IS NULL "
+            "AND village_reference_sha256 IS NULL) OR "
+            "(village_reference_version IS NOT NULL AND village_reference_source_url IS NOT NULL "
+            "AND village_reference_sha256 IS NOT NULL)",
+            name="ck_import_batches_village_reference_complete",
+        ),
         Index(
             "uq_import_batches_active_key",
             "dataset_key",
@@ -42,6 +49,9 @@ class ImportBatch(Base):
     approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     file_sha256: Mapped[str] = mapped_column(String(64))
     row_count: Mapped[int] = mapped_column(Integer)
+    village_reference_version: Mapped[str | None] = mapped_column(String(100))
+    village_reference_source_url: Mapped[str | None] = mapped_column(String(2048))
+    village_reference_sha256: Mapped[str | None] = mapped_column(String(64))
     active: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
