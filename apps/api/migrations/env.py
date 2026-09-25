@@ -3,7 +3,7 @@ from sqlalchemy import create_engine, pool
 
 from kdmp_api.core.config import get_settings
 from kdmp_api.core.database import Base
-from kdmp_api.modules.cooperatives.model import Cooperative  # noqa: F401
+from kdmp_api.modules.cooperatives.model import Cooperative, ImportBatch  # noqa: F401
 
 config = context.config
 target_metadata = Base.metadata
