@@ -1,5 +1,8 @@
+import hashlib
+import json
 import os
 from collections.abc import Iterator
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -12,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from kdmp_api.core.config import Settings
 from kdmp_api.core.database import get_session
+from kdmp_api.import_data import ImportPlan, publish_release, validate_release
 from kdmp_api.main import create_app
 
 pytestmark = pytest.mark.integration
@@ -114,6 +118,7 @@ def test_runtime_role_is_readonly() -> None:
             is False
         )
         connection.execute(text("SELECT id FROM cooperatives LIMIT 1"))
+        connection.execute(text("SELECT id FROM import_batches LIMIT 1"))
         connection.rollback()
         with pytest.raises(DBAPIError):
             connection.execute(text("DELETE FROM cooperatives"))
@@ -122,3 +127,79 @@ def test_runtime_role_is_readonly() -> None:
             connection.execute(text("CREATE TABLE forbidden_table (id int)"))
         connection.rollback()
     engine.dispose()
+
+
+def test_import_release_switches_public_view_atomically(
+    client: TestClient, session: Session, tmp_path: Path
+) -> None:
+    def plan(version: str, name: str):
+        csv_path = tmp_path / "cooperatives.csv"
+        csv_path.write_text(
+            f"external_id,name,village_code,longitude,latitude\nitem-1,{name},,106.8,-6.2\n",
+            encoding="utf-8",
+        )
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "dataset_key": "synthetic-test",
+                    "version": version,
+                    "source_name": "Synthetic integration source",
+                    "source_url": "https://example.org/source",
+                    "license": "Test only",
+                    "retrieved_at": "2026-09-25T00:00:00+07:00",
+                    "approved_by": "Synthetic reviewer",
+                    "approved_at": "2026-09-25T01:00:00+07:00",
+                    "file_sha256": hashlib.sha256(csv_path.read_bytes()).hexdigest(),
+                    "expected_rows": 1,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return validate_release(manifest_path, csv_path)
+
+    first = plan("v1", "First edition")
+    first_id = publish_release(session, first)
+    viewport = "/api/v1/cooperatives?bbox=106,-7,108,-5"
+    assert client.get(viewport).json()["features"][0]["properties"]["name"] == "First edition"
+    with pytest.raises(ValueError, match="already imported"):
+        publish_release(session, first)
+
+    with pytest.raises(ValueError, match="approval must be newer"):
+        publish_release(session, plan("v2", "Second edition"))
+
+    second = plan("v2", "Second edition")
+    second.manifest.approved_at = second.manifest.approved_at.replace(day=26)
+    second_id = publish_release(session, second)
+    features = client.get(viewport).json()["features"]
+    assert len(features) == 1
+    assert features[0]["properties"]["name"] == "Second edition"
+    assert (
+        session.execute(
+            text("SELECT count(*) FROM cooperatives WHERE import_batch_id IS NOT NULL")
+        ).scalar_one()
+        == 2
+    )
+    assert (
+        session.execute(
+            text("SELECT active FROM import_batches WHERE id=:id"), {"id": first_id}
+        ).scalar_one()
+        is False
+    )
+    assert (
+        session.execute(
+            text("SELECT active FROM import_batches WHERE id=:id"), {"id": second_id}
+        ).scalar_one()
+        is True
+    )
+
+    invalid = ImportPlan(
+        second.manifest.model_copy(
+            update={"version": "v3", "approved_at": second.manifest.approved_at.replace(day=27)}
+        ),
+        [second.rows[0], second.rows[0]],
+    )
+    with pytest.raises(DBAPIError), session.begin_nested():
+        publish_release(session, invalid)
+    assert client.get(viewport).json()["features"][0]["properties"]["name"] == "Second edition"
+    assert session.execute(text("SELECT count(*) FROM import_batches")).scalar_one() == 2
