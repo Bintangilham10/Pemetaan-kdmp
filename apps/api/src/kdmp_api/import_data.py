@@ -23,6 +23,23 @@ from kdmp_api.modules.cooperatives.model import ImportBatch
 MAX_FILE_BYTES = 50 * 1024 * 1024
 MAX_ROWS = 100_000
 COLUMNS = ["external_id", "name", "village_code", "longitude", "latitude"]
+REFERENCE_COLUMNS = ["village_code"]
+
+
+class VillageReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    version: str = Field(min_length=1, max_length=100)
+    source_url: HttpUrl = Field(max_length=2048)
+    file_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    expected_codes: int = Field(ge=1, le=MAX_ROWS)
+
+    @field_validator("source_url")
+    @classmethod
+    def require_public_url(cls, value: HttpUrl) -> HttpUrl:
+        if value.scheme != "https" or value.username or value.password:
+            raise ValueError("reference source_url must be HTTPS without credentials")
+        return value
 
 
 class ImportManifest(BaseModel):
@@ -38,6 +55,7 @@ class ImportManifest(BaseModel):
     approved_at: datetime
     file_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     expected_rows: int = Field(ge=1, le=MAX_ROWS)
+    village_reference: VillageReference | None = None
 
     @field_validator("retrieved_at", "approved_at")
     @classmethod
@@ -82,8 +100,43 @@ class ImportPlan:
     rows: list[ImportRow]
 
 
-def validate_release(manifest_path: Path, csv_path: Path) -> ImportPlan:
+def load_village_codes(path: Path, reference: VillageReference) -> set[str]:
+    if path.stat().st_size > MAX_FILE_BYTES:
+        raise ValueError(f"village reference exceeds {MAX_FILE_BYTES} bytes")
+    content = path.read_bytes()
+    if len(content) > MAX_FILE_BYTES:
+        raise ValueError(f"village reference exceeds {MAX_FILE_BYTES} bytes")
+    if hashlib.sha256(content).hexdigest() != reference.file_sha256:
+        raise ValueError("village reference SHA-256 does not match the manifest")
+    reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig"), newline=""), strict=True)
+    if reader.fieldnames != REFERENCE_COLUMNS:
+        raise ValueError("village reference header must be exactly: village_code")
+    codes: set[str] = set()
+    for values in reader:
+        code = values.get("village_code")
+        if code is None or None in values or not re.fullmatch(r"[0-9]{1,20}", code):
+            raise ValueError(f"village reference row {reader.line_num}: invalid code")
+        if code in codes:
+            raise ValueError(f"village reference row {reader.line_num}: duplicate code")
+        codes.add(code)
+        if len(codes) > MAX_ROWS:
+            raise ValueError(f"village reference exceeds {MAX_ROWS} codes")
+    if len(codes) != reference.expected_codes:
+        raise ValueError("village reference count does not match the manifest")
+    return codes
+
+
+def validate_release(
+    manifest_path: Path, csv_path: Path, village_codes_path: Path | None = None
+) -> ImportPlan:
     manifest = ImportManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    if (manifest.village_reference is None) != (village_codes_path is None):
+        raise ValueError("village reference metadata and --village-codes must be supplied together")
+    village_codes = (
+        load_village_codes(village_codes_path, manifest.village_reference)
+        if village_codes_path is not None and manifest.village_reference is not None
+        else None
+    )
     if csv_path.stat().st_size > MAX_FILE_BYTES:
         raise ValueError(f"CSV exceeds {MAX_FILE_BYTES} bytes")
     content = csv_path.read_bytes()
@@ -114,6 +167,10 @@ def validate_release(manifest_path: Path, csv_path: Path) -> ImportPlan:
             raise ValueError(f"row {line}: invalid name")
         if village_code and (len(village_code) > 20 or not re.fullmatch(r"[0-9]+", village_code)):
             raise ValueError(f"row {line}: village_code must contain at most 20 digits")
+        if village_code and village_codes is None:
+            raise ValueError(f"row {line}: village_code requires a versioned village reference")
+        if village_code and village_codes is not None and village_code not in village_codes:
+            raise ValueError(f"row {line}: village_code is absent from the reference")
         try:
             longitude = float(values["longitude"])
             latitude = float(values["latitude"])
@@ -129,6 +186,8 @@ def validate_release(manifest_path: Path, csv_path: Path) -> ImportPlan:
         rows.append(ImportRow(external_id, name, village_code, longitude, latitude))
     if len(rows) != manifest.expected_rows:
         raise ValueError("CSV row count does not match the manifest")
+    if village_codes is not None and not any(row.village_code for row in rows):
+        raise ValueError("village reference supplied but no row has a village_code")
     return ImportPlan(manifest, rows)
 
 
@@ -174,6 +233,15 @@ def publish_release(session: Session, plan: ImportPlan) -> UUID:
             approved_at=manifest.approved_at,
             file_sha256=manifest.file_sha256,
             row_count=len(plan.rows),
+            village_reference_version=(
+                manifest.village_reference.version if manifest.village_reference else None
+            ),
+            village_reference_source_url=(
+                str(manifest.village_reference.source_url) if manifest.village_reference else None
+            ),
+            village_reference_sha256=(
+                manifest.village_reference.file_sha256 if manifest.village_reference else None
+            ),
             active=False,
         )
     )
@@ -216,13 +284,14 @@ def main() -> None:
     )
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--csv", type=Path, required=True)
+    parser.add_argument("--village-codes", type=Path, help="Versioned CSV of valid village codes")
     parser.add_argument("--apply", action="store_true", help="Publish in one database transaction")
     parser.add_argument(
         "--confirm-sha256", help="Required with --apply; must match the reviewed CSV"
     )
     args = parser.parse_args()
     try:
-        plan = validate_release(args.manifest, args.csv)
+        plan = validate_release(args.manifest, args.csv, args.village_codes)
         if args.apply:
             if args.confirm_sha256 != plan.manifest.file_sha256:
                 raise ValueError("--confirm-sha256 must match the validated file")
