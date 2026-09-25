@@ -13,5 +13,6 @@
 **/playwright-report
 .playwright-cli
 artifacts
+imports
 docs
 **/public/vendor
