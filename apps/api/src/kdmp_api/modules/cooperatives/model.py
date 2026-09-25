@@ -2,10 +2,48 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from geoalchemy2 import Geometry, WKBElement
-from sqlalchemy import CheckConstraint, DateTime, Index, String, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from kdmp_api.core.database import Base
+
+
+class ImportBatch(Base):
+    __tablename__ = "import_batches"
+    __table_args__ = (
+        UniqueConstraint("dataset_key", "version", name="uq_import_batches_version"),
+        Index(
+            "uq_import_batches_active_key",
+            "dataset_key",
+            unique=True,
+            postgresql_where=text("active"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    dataset_key: Mapped[str] = mapped_column(String(80))
+    version: Mapped[str] = mapped_column(String(100))
+    source_name: Mapped[str] = mapped_column(String(200))
+    source_url: Mapped[str] = mapped_column(String(2048))
+    license: Mapped[str] = mapped_column(String(200))
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    approved_by: Mapped[str] = mapped_column(String(200))
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    file_sha256: Mapped[str] = mapped_column(String(64))
+    row_count: Mapped[int] = mapped_column(Integer)
+    active: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Cooperative(Base):
@@ -19,11 +57,21 @@ class Cooperative(Base):
             name="ck_cooperatives_location_valid",
         ),
         Index("ix_cooperatives_location", "location", postgresql_using="gist"),
+        Index("ix_cooperatives_import_batch_id", "import_batch_id"),
+        UniqueConstraint("import_batch_id", "external_id", name="uq_cooperatives_import_external"),
+        CheckConstraint(
+            "(import_batch_id IS NULL) = (external_id IS NULL)",
+            name="ck_cooperatives_import_identity",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(200))
     village_code: Mapped[str | None] = mapped_column(String(20))
+    import_batch_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("import_batches.id", name="fk_cooperatives_import_batch_id")
+    )
+    external_id: Mapped[str | None] = mapped_column(String(120))
     location: Mapped[WKBElement] = mapped_column(
         Geometry(geometry_type="POINT", srid=4326, spatial_index=False)
     )
