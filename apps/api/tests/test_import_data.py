@@ -9,7 +9,7 @@ import pytest
 from kdmp_api.import_data import validate_release
 
 HEADER = "external_id,name,village_code,longitude,latitude\n"
-ROW = "synthetic-1,Test cooperative,3171010001,106.8,-6.2\n"
+ROW = "synthetic-1,Test cooperative,,106.8,-6.2\n"
 
 
 def write_release(
@@ -35,11 +35,74 @@ def write_release(
     return manifest_path, csv_path
 
 
+def add_village_reference(
+    manifest_path: Path, tmp_path: Path, body: str = "village_code\n3171010001\n"
+) -> Path:
+    reference_path = tmp_path / "villages.csv"
+    reference_path.write_text(body, encoding="utf-8")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["village_reference"] = {
+        "version": "2026-test",
+        "source_url": "https://example.org/villages",
+        "file_sha256": hashlib.sha256(reference_path.read_bytes()).hexdigest(),
+        "expected_codes": 1,
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return reference_path
+
+
 def test_valid_release_has_provenance_and_coordinate_order(tmp_path: Path) -> None:
     plan = validate_release(*write_release(tmp_path))
     assert plan.manifest.dataset_key == "synthetic-test"
     assert plan.rows[0].external_id == "synthetic-1"
     assert (plan.rows[0].longitude, plan.rows[0].latitude) == (106.8, -6.2)
+
+
+def test_village_code_requires_a_matching_versioned_reference(tmp_path: Path) -> None:
+    manifest_path, csv_path = write_release(
+        tmp_path, HEADER + "synthetic-1,Test cooperative,3171010001,106.8,-6.2\n"
+    )
+    with pytest.raises(ValueError, match="requires a versioned village reference"):
+        validate_release(manifest_path, csv_path)
+    reference_path = add_village_reference(manifest_path, tmp_path)
+    plan = validate_release(manifest_path, csv_path, reference_path)
+    assert plan.rows[0].village_code == "3171010001"
+    assert plan.manifest.village_reference is not None
+    assert plan.manifest.village_reference.version == "2026-test"
+
+
+def test_rejects_unknown_or_changed_village_reference(tmp_path: Path) -> None:
+    manifest_path, csv_path = write_release(
+        tmp_path, HEADER + "synthetic-1,Test cooperative,3171010002,106.8,-6.2\n"
+    )
+    reference_path = add_village_reference(manifest_path, tmp_path)
+    with pytest.raises(ValueError, match="absent from the reference"):
+        validate_release(manifest_path, csv_path, reference_path)
+    reference_path.write_text("village_code\n3171010002\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="reference SHA-256"):
+        validate_release(manifest_path, csv_path, reference_path)
+
+
+def test_rejects_duplicate_village_reference_codes(tmp_path: Path) -> None:
+    manifest_path, csv_path = write_release(
+        tmp_path, HEADER + "synthetic-1,Test cooperative,3171010001,106.8,-6.2\n"
+    )
+    reference_path = add_village_reference(
+        manifest_path, tmp_path, "village_code\n3171010001\n3171010001\n"
+    )
+    with pytest.raises(ValueError, match="duplicate code"):
+        validate_release(manifest_path, csv_path, reference_path)
+
+
+def test_reference_metadata_and_file_must_be_supplied_together(tmp_path: Path) -> None:
+    manifest_path, csv_path = write_release(tmp_path)
+    reference_path = tmp_path / "villages.csv"
+    reference_path.write_text("village_code\n3171010001\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="supplied together"):
+        validate_release(manifest_path, csv_path, reference_path)
+    add_village_reference(manifest_path, tmp_path)
+    with pytest.raises(ValueError, match="supplied together"):
+        validate_release(manifest_path, csv_path)
 
 
 @pytest.mark.parametrize(
@@ -85,6 +148,31 @@ def test_cli_dry_run_and_apply_guard(tmp_path: Path) -> None:
     )
     assert without_confirmed_hash.returncode != 0
     assert "--confirm-sha256" in without_confirmed_hash.stderr
+
+
+def test_cli_accepts_versioned_village_reference(tmp_path: Path) -> None:
+    manifest_path, csv_path = write_release(
+        tmp_path, HEADER + "synthetic-1,Test cooperative,3171010001,106.8,-6.2\n"
+    )
+    reference_path = add_village_reference(manifest_path, tmp_path)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "kdmp_api.import_data",
+            "--manifest",
+            str(manifest_path),
+            "--csv",
+            str(csv_path),
+            "--village-codes",
+            str(reference_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["status"] == "validated"
 
 
 @pytest.mark.parametrize(
