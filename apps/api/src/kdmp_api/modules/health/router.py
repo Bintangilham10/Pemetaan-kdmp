@@ -41,10 +41,10 @@ def readiness(session: Annotated[Session, Depends(get_session)]) -> ReadyStatus:
     try:
         session.execute(text("SELECT PostGIS_Version()")).scalar_one()
         revisions = session.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
-        table_exists = session.execute(
-            text("SELECT to_regclass('public.cooperatives')")
-        ).scalar_one()
-        if revisions != [migration_head()] or table_exists is None:
+        tables = session.execute(
+            text("SELECT to_regclass('public.cooperatives'), to_regclass('public.import_batches')")
+        ).one()
+        if revisions != [migration_head()] or any(table is None for table in tables):
             raise HTTPException(status_code=503, detail="Service not ready")
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail="Service not ready") from exc
