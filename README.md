@@ -46,6 +46,13 @@ compose*.yaml        Stack utama, port dev opsional, database test terisolasi
 
 Detail keputusan dan risiko: [arsitektur](docs/architecture.md).
 
+## Tahap data berikutnya
+
+Alur [impor CSV tervalidasi](docs/importing.md) menyiapkan sumber, versi, hash,
+persetujuan manual, serta publikasi transaksional dengan riwayat rilis. Tidak ada
+dataset resmi yang disertakan atau diterbitkan otomatis. Sumber dan kode wilayah
+resmi harus disepakati sebelum mengisi data nyata.
+
 ## Pengembangan dengan hot reload
 
 Tambahan prasyarat: npm dan uv, Python 3.13. Dependency Node dan Python dikunci
