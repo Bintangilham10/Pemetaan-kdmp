@@ -50,6 +50,10 @@ flowchart LR
 - Tabel awal `cooperatives`: UUID, nama, kode desa opsional, titik lokasi, sumber
   data, waktu pembuatan. Tidak menyimpan NIK, rekening, telepon pribadi, atau data
   sensitif. Hanya data yang layak dipublikasikan boleh masuk tabel fase ini.
+- Impor publik melalui CLI migrator memakai manifest sumber, versi, lisensi,
+  penanggung jawab persetujuan, hash CSV, dan ID eksternal unik per rilis. Hanya
+  rilis aktif yang tampil; penggantian rilis atomik dan riwayat tetap tersimpan.
+  Validasi kode wilayah resmi masih membutuhkan sumber referensi yang disepakati.
 - `geometry(Point, 4326)`, urutan GeoJSON **longitude, latitude**, indeks GiST,
   constraint koordinat dan titik nonempty. Tanggal menggunakan UTC/timestamptz.
 - API `/api/v1/cooperatives` mengharuskan bbox valid dan limit maksimum 1.000.
