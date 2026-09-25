@@ -14,9 +14,12 @@ Header CSV harus persis:
 external_id,name,village_code,longitude,latitude
 ```
 
-`external_id` harus unik dalam satu versi dataset. `village_code` boleh kosong;
-nilai yang terisi saat ini hanya diperiksa sebagai 1-20 digit, belum dicocokkan
-dengan master wilayah resmi. Koordinat memakai longitude lalu latitude (EPSG:4326),
+`external_id` harus unik dalam satu versi dataset. `village_code` boleh kosong.
+Jika terisi, sediakan CSV referensi kode wilayah berversi dengan header tunggal
+`village_code`; kode harus 1-20 digit dan ada di daftar tersebut. Pilih sumber
+referensi resmi yang disepakati pemilik data. Keanggotaan kode dalam daftar belum
+membuktikan bahwa titik berada di dalam batas desa tersebut.
+Koordinat memakai longitude lalu latitude (EPSG:4326),
 berada dalam rentang dunia dan kotak kasar Indonesia 94-142 BT, 12 LS-8 LU.
 Kotak ini hanya pemeriksaan kewajaran, bukan validasi batas administratif.
 CSV boleh berisi maksimal 100.000 baris dan 50 MiB. Gunakan `dataset_key` yang sama
@@ -40,9 +43,27 @@ Contoh bentuk manifest (isi dengan metadata sumber nyata, bukan nilai contoh):
 }
 ```
 
+Jika CSV koperasi memiliki `village_code`, tambahkan objek berikut ke manifest:
+
+```json
+"village_reference": {
+  "version": "versi-referensi-resmi",
+  "source_url": "https://penerbit.example/kode-wilayah",
+  "file_sha256": "64 digit heksadesimal huruf kecil dari CSV referensi",
+  "expected_codes": 1
+}
+```
+
+Simpan referensi sebagai `imports/villages.csv` dan tambahkan
+`--village-codes imports/villages.csv` pada validasi lokal, atau
+`--village-codes /imports/villages.csv` pada perintah Docker. SHA-256 referensi
+harus sama dengan `village_reference.file_sha256`. Versi, URL sumber, dan hash
+referensi ikut tersimpan dalam riwayat rilis. Saat semua `village_code` kosong,
+hilangkan objek dan argumen referensi.
+
 `approved_by` dan `approved_at` mencatat persetujuan operator; CLI tidak
 memverifikasi identitas atau izin secara otomatis. Lakukan review sumber, lisensi,
-duplikasi, kode wilayah, dan kewajaran lokasi di luar CLI. Jangan masukkan NIK,
+duplikasi, kesesuaian kode dengan lokasi, dan kewajaran lokasi di luar CLI. Jangan masukkan NIK,
 nomor rekening, telepon pribadi, atau kolom lain yang tidak layak publik. Kolom
 tambahan ditolak.
 
