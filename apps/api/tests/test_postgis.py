@@ -15,7 +15,14 @@ from sqlalchemy.orm import Session
 
 from kdmp_api.core.config import Settings
 from kdmp_api.core.database import get_session
-from kdmp_api.import_data import ImportPlan, publish_release, validate_release
+from kdmp_api.import_data import (
+    ImportManifest,
+    ImportPlan,
+    ImportRow,
+    VillageReference,
+    publish_release,
+    validate_release,
+)
 from kdmp_api.main import create_app
 
 pytestmark = pytest.mark.integration
@@ -203,3 +210,40 @@ def test_import_release_switches_public_view_atomically(
         publish_release(session, invalid)
     assert client.get(viewport).json()["features"][0]["properties"]["name"] == "Second edition"
     assert session.execute(text("SELECT count(*) FROM import_batches")).scalar_one() == 2
+
+
+def test_import_persists_village_reference_provenance(session: Session) -> None:
+    reference = VillageReference(
+        version="2026-test",
+        source_url="https://example.org/villages",
+        file_sha256="0" * 64,
+        expected_codes=1,
+    )
+    manifest = ImportManifest(
+        dataset_key="reference-test",
+        version="v1",
+        source_name="Reference integration source",
+        source_url="https://example.org/source",
+        license="Test only",
+        retrieved_at="2026-09-25T00:00:00+07:00",
+        approved_by="Synthetic reviewer",
+        approved_at="2026-09-25T01:00:00+07:00",
+        file_sha256="1" * 64,
+        expected_rows=1,
+        village_reference=reference,
+    )
+    batch_id = publish_release(
+        session,
+        ImportPlan(
+            manifest,
+            [ImportRow("reference-1", "Reference test", "3171010001", 106.8, -6.2)],
+        ),
+    )
+    row = session.execute(
+        text(
+            "SELECT village_reference_version, village_reference_source_url, "
+            "village_reference_sha256 FROM import_batches WHERE id=:id"
+        ),
+        {"id": batch_id},
+    ).one()
+    assert row == ("2026-test", "https://example.org/villages", "0" * 64)
