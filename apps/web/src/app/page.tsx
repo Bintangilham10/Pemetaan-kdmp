@@ -118,9 +118,9 @@ export default function Home() {
             <div className="flex gap-3 rounded-xl border bg-card p-4">
               <Database className="mt-0.5 size-4 shrink-0 text-primary" />
               <div>
-                <p className="text-xs font-semibold">Data terverifikasi</p>
+                <p className="text-xs font-semibold">Data yang ditinjau</p>
                 <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                  Belum ada dataset resmi yang dimuat pada tahap ini.
+                  Titik ditampilkan setelah sumber dan izin publikasi dataset divalidasi.
                 </p>
               </div>
             </div>
