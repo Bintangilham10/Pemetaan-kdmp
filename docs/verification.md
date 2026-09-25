@@ -74,3 +74,20 @@ Tidak mengandalkan style kosong yang dapat lolos walaupun worker rusak.
 
 Screenshot visual lokal tersedia setelah sesi QA di `artifacts/desktop.png`,
 `artifacts/mobile.png`, dan `artifacts/small-mobile.png` (diabaikan Git).
+
+## Verifikasi alur impor, 25 September 2026
+
+- Pemeriksaan format, ESLint, TypeScript, Ruff, mypy, kontrak OpenAPI, dan build
+  produksi lulus setelah penambahan impor.
+- Unit API/validator: 36 lulus. Integrasi PostGIS: 8 lulus pada database test
+  terpisah, termasuk pergantian rilis aktif, penolakan versi duplikat, dan rollback
+  saat penulisan satu batch gagal.
+- `alembic check` tidak mendeteksi drift setelah migrasi `0002_import_batches`.
+- CLI dry run dan `--apply` diuji dengan satu baris sintetis di database test;
+  hash cocok, baris terbit, dan lingkungan test dibersihkan. Database utama tidak
+  diisi atau dimigrasi dalam pemeriksaan ini.
+- Stack Compose QA terpisah mencapai status healthy. Playwright desktop dan mobile:
+  10 lulus pada web/API/PostGIS dengan dataset kosong. Stack QA memakai port web
+  33001 dan volume tersendiri; stack utama tetap tidak diubah.
+- Pencocokan kode wilayah dengan referensi resmi serta review izin publikasi tetap
+  merupakan pekerjaan pemilik data sebelum impor nyata.
