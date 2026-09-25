@@ -147,8 +147,14 @@ export default function CooperativeMap({ styleUrl }: { styleUrl: string }) {
         if (!feature || feature.geometry.type !== "Point") return;
         const [longitude, latitude] = feature.geometry.coordinates;
         if (longitude === undefined || latitude === undefined) return;
-        const content = document.createElement("p");
-        content.textContent = String(feature.properties.name ?? "Koperasi");
+        const content = document.createElement("div");
+        const name = document.createElement("p");
+        name.className = "text-sm font-semibold";
+        name.textContent = String(feature.properties.name ?? "Koperasi");
+        const source = document.createElement("p");
+        source.className = "mt-1 text-xs text-muted-foreground";
+        source.textContent = `Sumber: ${String(feature.properties.source ?? "Tidak diketahui")}`;
+        content.append(name, source);
         popup?.remove();
         popup = new Popup({ closeButton: false })
           .setLngLat([longitude, latitude])
