@@ -53,7 +53,9 @@ flowchart LR
 - Impor publik melalui CLI migrator memakai manifest sumber, versi, lisensi,
   penanggung jawab persetujuan, hash CSV, dan ID eksternal unik per rilis. Hanya
   rilis aktif yang tampil; penggantian rilis atomik dan riwayat tetap tersimpan.
-  Validasi kode wilayah resmi masih membutuhkan sumber referensi yang disepakati.
+  Kode wilayah yang terisi diverifikasi terhadap CSV referensi berversi yang hash,
+  URL sumber, dan versinya disimpan bersama batch. Pemilihan referensi resmi serta
+  pemeriksaan titik terhadap batas desa tetap memerlukan pemilik data.
 - `geometry(Point, 4326)`, urutan GeoJSON **longitude, latitude**, indeks GiST,
   constraint koordinat dan titik nonempty. Tanggal menggunakan UTC/timestamptz.
 - API `/api/v1/cooperatives` mengharuskan bbox valid dan limit maksimum 1.000.
