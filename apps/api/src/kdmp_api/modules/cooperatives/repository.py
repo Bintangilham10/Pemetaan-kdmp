@@ -1,7 +1,7 @@
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from kdmp_api.modules.cooperatives.model import Cooperative
+from kdmp_api.modules.cooperatives.model import Cooperative, ImportBatch
 from kdmp_api.modules.cooperatives.schemas import (
     CooperativeCollection,
     CooperativeFeature,
@@ -22,7 +22,11 @@ def find_in_bbox(session: Session, bbox: BoundingBox, limit: int) -> Cooperative
             func.ST_X(Cooperative.location).label("longitude"),
             func.ST_Y(Cooperative.location).label("latitude"),
         )
-        .where(func.ST_Intersects(Cooperative.location, envelope))
+        .outerjoin(ImportBatch, Cooperative.import_batch_id == ImportBatch.id)
+        .where(
+            func.ST_Intersects(Cooperative.location, envelope),
+            or_(Cooperative.import_batch_id.is_(None), ImportBatch.active.is_(True)),
+        )
         .order_by(Cooperative.id)
         .limit(limit + 1)
     )
